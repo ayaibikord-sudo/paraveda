@@ -1,0 +1,21 @@
+import fs from 'fs'; import {JSDOM} from 'jsdom';
+const html=fs.readFileSync('public_html/index.html','utf8'); const js=html.match(/<script type="module" crossorigin>([\s\S]*?)<\/script>/)[1].replace(/import\.meta/g,'({})');
+const base=JSON.parse(fs.readFileSync('public_html/crm_data.json','utf8'));const admin=base.paraveda_users_v1.d.find(u=>u.role==='admin');
+const P='TEST PRODUIT',today='2026-09-10';
+base.paraveda_catalog_v1.d=[{nom:P,link:'',prix:'250',commission:'35',stock:''}];
+base['sheet_pièce'].d=[[P,'100','40','4000',today]];
+const mk=(id,qte,prix,up)=>({id,_u:1,dateCreation:today,dateConfirmation:today,statut:'Confirmé',remarques:'',idCmd:'C'+id,nom:'client'+id,telephone:'0600000000',ville:'Casablanca',adresse:'x',qte,prix,produit:P,livraison:'Livrée',upsell:up,carousell:'',agent:'AYA',link:'',carosellFlag:'',originLead:'Facebook',commission:35,fees:0});
+base.paraveda_orders_v5.d=[mk(1,4,450,0),mk(2,1,250,50)];
+base.paraveda_perfrows_v1.d=[{id:1,source:'Facebook',produit:P,date:today,prix:250}];
+base.paraveda_adspend_v1.d=[];
+const dom=new JSDOM('<div id="root"></div>',{url:'http://localhost/',pretendToBeVisual:true,runScripts:'outside-only'});const w=dom.window;
+w.fetch=async()=>({ok:false});w.alert=()=>{};w.confirm=()=>true;w.matchMedia=()=>({matches:false,addEventListener(){},removeEventListener(){}});w.ResizeObserver=class{observe(){}unobserve(){}disconnect(){}};w.HTMLCanvasElement.prototype.getContext=()=>null;w.console.error=e=>console.log('ERR',String(e).slice(0,200));w.console.warn=()=>{};
+for(const [k,v] of Object.entries(base)){w.localStorage.setItem(k,JSON.stringify(v.d));w.localStorage.setItem('ct_'+k,String(v.t));}w.localStorage.setItem('paraveda_session_v1',String(admin.id));w.localStorage.removeItem('perf_products_v1');w.eval(js);const S=ms=>new Promise(r=>setTimeout(r,ms));await S(3500);
+const d=w.document,click=el=>el.dispatchEvent(new w.MouseEvent('click',{bubbles:true,cancelable:true,view:w}));
+click([...d.querySelectorAll('div[title]')].find(x=>x.getAttribute('title')==='Bilan'));await S(150);click([...d.querySelectorAll('button')].find(b=>b.textContent.trim().endsWith('Dashboard performance')));await S(800);
+const kol=[...d.querySelectorAll('button')].find(b=>b.textContent.trim()==='الكل');kol&&click(kol);await S(400);
+const titles=[...d.querySelectorAll('[title]')].map(e=>e.title).find(t=>/GAIN\/PERTE/.test(t));
+console.log(titles||'(no gain tooltip)');
+// expected: CA=450+250=700, UP=50 → 750 ; pcs=5 × 40 = 200 ; ship = 35+35=70 ; conf 2×10=20 → gain = 750-200-70-20 = 460
+console.log('gain 460?',/GAIN\/PERTE = 460/.test(titles||'')?'✅':'❌');
+process.exit(0);
