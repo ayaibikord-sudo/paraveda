@@ -5,7 +5,7 @@ const P='TEST PRODUIT',today='2026-09-10';
 base.paraveda_catalog_v1.d=[{nom:P,link:'',prix:'250',commission:'35',stock:''}];
 base['sheet_pièce'].d=[[P,'100','40','4000',today]];
 const mk=(id,qte,prix,up)=>({id,_u:1,dateCreation:today,dateConfirmation:today,statut:'Confirmé',remarques:'',idCmd:'C'+id,nom:'client'+id,telephone:'0600000000',ville:'Casablanca',adresse:'x',qte,prix,produit:P,livraison:'Livrée',upsell:up,carousell:'',agent:'AYA',link:'',carosellFlag:'',originLead:'Facebook',commission:35,fees:0});
-base.paraveda_orders_v5.d=[mk(1,4,450,0),mk(2,1,250,50)];
+base.paraveda_orders_v5.d=[mk(1,1,250,0),mk(2,2,280,1),mk(3,3,300,2)];
 base.paraveda_perfrows_v1.d=[{id:1,source:'Facebook',produit:P,date:today,prix:250}];
 base.paraveda_adspend_v1.d=[];
 const dom=new JSDOM('<div id="root"></div>',{url:'http://localhost/',pretendToBeVisual:true,runScripts:'outside-only'});const w=dom.window;
@@ -16,6 +16,11 @@ click([...d.querySelectorAll('div[title]')].find(x=>x.getAttribute('title')==='B
 const kol=[...d.querySelectorAll('button')].find(b=>b.textContent.trim()==='الكل');kol&&click(kol);await S(400);
 const titles=[...d.querySelectorAll('[title]')].map(e=>e.title).find(t=>/GAIN\/PERTE/.test(t));
 console.log(titles||'(no gain tooltip)');
-// expected: CA=450+250=700, UP=50 → 750 ; pcs=5 × 40 = 200 ; ship = 35+35=70 ; conf 2×10=20 → gain = 750-200-70-20 = 460
-console.log('gain 460?',/GAIN\/PERTE = 460/.test(titles||'')?'✅':'❌');
+// expected: revenue=250+280+300=830 ; pcs=6 × 40 = 240 ; ship = 3×35=105 ; conf 3×10=30 → gain = 830-240-105-30 = 455
+console.log('gain 455?',/GAIN\/PERTE = 455/.test(titles||'')?'✅':'❌');
+
+click([...d.querySelectorAll('div,span')].find(x=>x.children.length===0&&x.textContent.trim()==='COMONDES').closest('div[title]')||[...d.querySelectorAll('span')].find(x=>x.textContent.trim()==='COMONDES'));await S(600);
+click([...d.querySelectorAll('button')].find(b=>b.textContent.trim()==='الكل'));await S(400);
+const qteIn=[...d.querySelectorAll('input[type=number]')].find(i=>i.value==='1');const set=(el,v)=>{Object.getOwnPropertyDescriptor(w.HTMLInputElement.prototype,'value').set.call(el,v);el.dispatchEvent(new w.Event('input',{bubbles:true}));el.dispatchEvent(new w.Event('change',{bubbles:true}))};
+if(qteIn){set(qteIn,'5');await S(300);const o=JSON.parse(w.localStorage.getItem('paraveda_orders_v5')).find(o=>o.id===1);console.log('qte 5 → upsell auto 4?',o.qte===5&&o.upsell===4?'✅':'❌',o.qte,o.upsell)}else console.log('qte input not found');
 process.exit(0);
