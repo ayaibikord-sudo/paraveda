@@ -1,0 +1,4 @@
+crm-paraveda-data/backups/
+crm-paraveda-data/audit.log*
+crm-paraveda-data/.crm.lock*
+node_modules/

@@ -1,0 +1,32 @@
+import fs from 'fs'; import {JSDOM} from 'jsdom';
+const html=fs.readFileSync('public_html/index.html','utf8'); const js=html.match(/<script type="module" crossorigin>([\s\S]*?)<\/script>/)[1].replace(/import\.meta/g,'({})');
+const base=JSON.parse(fs.readFileSync('public_html/crm_data.json','utf8'));const users=base.paraveda_users_v1.d;const admin=users.find(u=>u.role==='admin');
+// controlled dataset: product P, stock 100 (2 purchase rows 60+40), orders: Livrée qte 2, Livrée qte 3, Confirmé (in flight) qte 2, Retour qte 5
+const P='مكمل مرض السكري';
+const mk=(id,qte,liv,statut='Confirmé')=>({id,dateCreation:'2026-09-08',dateConfirmation:'2026-09-08',statut,remarques:'',idCmd:'1',nom:'x',telephone:'0600000'+id,ville:'Casablanca',adresse:'a',qte,prix:100*qte,produit:P,livraison:liv,upsell:0,carousell:'',agent:'imane',link:'',carosellFlag:'',originLead:'Leader',commission:35,fees:'',_u:1});
+base.paraveda_orders_v5.d=[mk(1,2,'Livrée'),mk(2,3,'Livrée'),mk(3,2,''),mk(4,5,'Retour'),mk(5,4,'Rechange'),mk(6,6,'Remboursé')];
+base['sheet_pièce'].d=[[P,'60','38','2280','26/08/2026'],[P,'40','50','2000','27/08/2026']];
+const sl=ms=>new Promise(r=>setTimeout(r,ms));
+const dom=new JSDOM('<div id="root"></div>',{url:'http://localhost/',pretendToBeVisual:true,runScripts:'outside-only'});const w=dom.window;
+w.fetch=async()=>({ok:false});w.alert=()=>{};w.confirm=()=>true;w.matchMedia=()=>({matches:false,addEventListener(){},removeEventListener(){}});w.ResizeObserver=class{observe(){}unobserve(){}disconnect(){}};w.HTMLCanvasElement.prototype.getContext=()=>null;w.console.error=e=>console.log('ERR',String(e).slice(0,200));w.console.warn=()=>{};
+for(const [k,v] of Object.entries(base))w.localStorage.setItem(k,JSON.stringify(v.d));w.localStorage.setItem('paraveda_session_v1',String(admin.id));w.eval(js);await sl(2500);
+const groups={Bilan:['Dashboard performance','suivi confirmation','statistique'],Articles:['PRODUITS','pièce'],SHIPING:['Les villes','LIVRAISON']};
+const click=el=>el.dispatchEvent(new w.MouseEvent('click',{bubbles:true,cancelable:true,view:w}));
+const nav=async name=>{const grp=Object.entries(groups).find(([g,l])=>l.includes(name))?.[0];if(grp){const gb=[...w.document.querySelectorAll('div[title]')].find(d=>d.getAttribute('title')===grp);if(gb){click(gb);await sl(50)}}
+const el=[...w.document.querySelectorAll('button,div[title],span')].find(e=>e.textContent.trim()===name||(e.tagName==='BUTTON'&&e.textContent.trim().endsWith(name)));if(!el)throw new Error('nav '+name);click(el.closest('button')||el);await sl(500)};
+await nav('pièce');
+const jrows=w.document.querySelectorAll('tbody tr').length;console.log('journal rows =',jrows,jrows===2?'✅':'❌');click([...w.document.querySelectorAll('button')].find(b=>/Stock par produit/.test(b.textContent)));await sl(300);
+const ths=[...w.document.querySelectorAll('th')].map(t=>t.textContent.trim());const rows=[...w.document.querySelectorAll('tbody tr')].map(tr=>[...tr.querySelectorAll('td')].map(td=>td.textContent.trim()));
+console.log('headers:',ths.join(' | '));rows.forEach(r=>console.log('row:',r.join(' | ')));
+const col=n=>ths.findIndex(t=>t.replace('⚡ ','').startsWith(n));const r=rows.find(x=>x.some(c=>c.includes(P)));
+const chk=(n,exp)=>{const v=(r[col(n)]||'').replace(/[^\d.,DH\s-]/g,'');console.log(`${n} = ${v} (expected ${exp})`,String(v).replace(/\s/g,'')===String(exp)?'✅':'❌')};
+chk('Livrées (cmd)',2);chk('Rechange',4);chk('Remboursé',6);chk('Sorties',9);chk('En cours',2);chk('Stock restant',91);chk('Dispo',89);chk('CA',"900DH");
+await nav('PRODUITS');
+const t2=[...w.document.querySelectorAll('th')].map(t=>t.textContent.trim());const pr=[...w.document.querySelectorAll('tbody tr')].map(tr=>[...tr.querySelectorAll('td')].map(td=>td.textContent.trim())).find(r=>r.some(c=>c.includes(P)));
+console.log('PRODUITS pièces =',pr?.[t2.findIndex(h=>/^Pièces/i.test(h))],'(expected 9)',pr?.[t2.findIndex(h=>/^Pièces/i.test(h))]==='9'?'✅':'❌');const stk=pr?.[t2.findIndex(h=>/^Stock$/i.test(h))]||'';console.log('PRODUITS stock (from pièce) =',stk,'(expected 91 with 2 🚚)',/91/.test(stk)&&/2 🚚/.test(stk)?'✅':'❌');
+await nav('statistique');const txt=w.document.body.textContent;
+const rr=[...w.document.querySelectorAll('tbody tr')].map(tr=>[...tr.querySelectorAll('td')].map(td=>td.textContent.trim())).find(r=>r[0]===P||r.includes(P));console.log('rentabilité row:',rr?.join(' | '));console.log('achat = 9 pièces × 42.8 = 385 DH?',rr?.some(c=>/^385/.test(c.replace(/\s/g,'')))?'✅':'❌');
+await nav('Les villes');const vt=w.document.body.textContent.replace(/\s+/g,' ');console.log('LES VILLES ventes = 900 DH (Livrée+Rechange)?',/900 ?DH/.test(vt)?'✅':'❌', vt.match(/المبيعات.{0,40}/)?.[0]);
+await nav('Dashboard performance');const tt=w.document.body.textContent;const m=tt.match(/\((\d+) pièces × 38 PRIX D'achat\) = ([\d\s,]+) DH/)||[...w.document.querySelectorAll('[title]')].map(e=>e.title).join(' ').match(/\((\d+) pièces × 38 PRIX D'achat\) = ([\d\s,]+) DH/);console.log('Dashboard achat tooltip:',m?m[0]:'(no row for product/source in range)');
+console.log('rentabilité page text sample:',w.document.body.textContent.replace(/\s+/g,' ').slice(0,600));
+process.exit(0);

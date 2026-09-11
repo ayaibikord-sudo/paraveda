@@ -1,0 +1,17 @@
+import fs from 'fs'; import {JSDOM} from 'jsdom';
+const html=fs.readFileSync('public_html/index.html','utf8'); const js=html.match(/<script type="module" crossorigin>([\s\S]*?)<\/script>/)[1].replace(/import\.meta/g,'({})');
+const base=JSON.parse(fs.readFileSync('public_html/crm_data.json','utf8'));const admin=base.paraveda_users_v1.d.find(u=>u.role==='admin');
+const sl=ms=>new Promise(r=>setTimeout(r,ms));
+const dom=new JSDOM('<div id="root"></div>',{url:'http://localhost/',pretendToBeVisual:true,runScripts:'outside-only'});const w=dom.window;
+w.fetch=async()=>({ok:false});w.alert=()=>{};w.confirm=()=>true;w.matchMedia=()=>({matches:false,addEventListener(){},removeEventListener(){}});w.ResizeObserver=class{observe(){}unobserve(){}disconnect(){}};w.HTMLCanvasElement.prototype.getContext=()=>null;const errs=[];w.console.error=e=>errs.push(String(e).slice(0,300));w.console.warn=()=>{};
+for(const [k,v] of Object.entries(base))w.localStorage.setItem(k,JSON.stringify(v.d));w.localStorage.setItem('paraveda_session_v1',String(admin.id));w.eval(js);await sl(2500);
+const click=el=>el.dispatchEvent(new w.MouseEvent('click',{bubbles:true,cancelable:true,view:w}));
+const gb=[...w.document.querySelectorAll('div[title]')].find(d=>d.getAttribute('title')==='Articles');gb&&click(gb);await sl(50);
+const el=[...w.document.querySelectorAll('button,div[title],span')].find(e=>e.textContent.trim()==='PRODUITS');click(el.closest('button')||el);await sl(600);
+const t=()=>w.document.body.textContent;
+console.log('title?',/Catalogue & stock/.test(t())?'✅':'❌','| KPIs?',/Produits au catalogue/.test(t())&&/Stock total/.test(t())?'✅':'❌','| tfoot?',w.document.querySelectorAll('tfoot').length?'✅':'❌','| CSV?',/📥 CSV/.test(t())?'✅':'❌');
+const rows=[...w.document.querySelectorAll('tbody tr')];console.log('rows:',rows.length,'| first:',rows[0]?.textContent.replace(/\s+/g,' ').slice(0,150));
+console.log('stock badge from pièce?',/📦/.test(rows.map(r=>r.textContent).join(''))?'✅':'❌','| achat moyen shown?',rows.some(r=>/DH.*DH/.test(r.textContent))?'✅':'❌');
+const add=[...w.document.querySelectorAll('button')].find(b=>b.textContent.includes('إضافة منتج'));click(add);await sl(200);console.log('form opens?',w.document.querySelector('form')?'✅':'❌','| no commission field?',!/العمولة/.test(t())?'✅':'❌');
+const inp=[...w.document.querySelectorAll('input')].find(i=>i.closest('header'));const p=Object.getOwnPropertyDescriptor(w.HTMLInputElement.prototype,'value');p.set.call(inp,'zzzz');inp.dispatchEvent(new w.Event('input',{bubbles:true}));await sl(200);console.log('search filters?',/لا توجد منتجات/.test(t())?'✅':'❌');
+console.log('errors:',errs.length?errs:'none');process.exit(0);

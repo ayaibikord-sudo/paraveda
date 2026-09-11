@@ -1,0 +1,16 @@
+import fs from 'fs'; import {JSDOM} from 'jsdom';
+const html=fs.readFileSync('public_html/index.html','utf8'); const js=html.match(/<script type="module" crossorigin>([\s\S]*?)<\/script>/)[1].replace(/import\.meta/g,'({})');
+const base=JSON.parse(fs.readFileSync('public_html/crm_data.json','utf8'));const admin=base.paraveda_users_v1.d.find(u=>u.role==='admin');
+const dom=new JSDOM('<div id="root"></div>',{url:'http://localhost/',pretendToBeVisual:true,runScripts:'outside-only'});const w=dom.window;
+w.fetch=async()=>({ok:false});w.alert=()=>{};w.confirm=()=>true;w.matchMedia=()=>({matches:false,addEventListener(){},removeEventListener(){}});w.ResizeObserver=class{observe(){}unobserve(){}disconnect(){}};w.HTMLCanvasElement.prototype.getContext=()=>null;w.console.error=e=>console.log('ERR',String(e).slice(0,300));w.console.warn=()=>{};
+for(const [k,v] of Object.entries(base)){w.localStorage.setItem(k,JSON.stringify(v.d));w.localStorage.setItem('ct_'+k,String(v.t));}w.localStorage.setItem('paraveda_session_v1',String(admin.id));w.eval(js);const S=ms=>new Promise(r=>setTimeout(r,ms));await S(3500);
+const d=w.document,click=el=>el.dispatchEvent(new w.MouseEvent('click',{bubbles:true,cancelable:true,view:w}));
+click([...d.querySelectorAll('div[title]')].find(x=>x.getAttribute('title')==='Articles'));await S(100);click([...d.querySelectorAll('button')].find(b=>b.textContent.trim().endsWith('pièce')));await S(700);
+const T=()=>d.body.textContent;const before=JSON.parse(w.localStorage.getItem('sheet_pièce')).length;
+console.log('title?',/Achats & Stock/.test(T())?'✅':'❌','| KPIs?',/Pièces achetées/.test(T())&&/Alertes stock/.test(T())?'✅':'❌','| journal rows =',d.querySelectorAll('tbody tr').length,'(data',before,')');
+click([...d.querySelectorAll('button')].find(b=>b.textContent.trim()==='＋ شراء جديد'));await S(200);const f=d.querySelector('form');console.log('modal?',!!f?'✅':'❌');
+const set=(el,v)=>{Object.getOwnPropertyDescriptor(w.HTMLInputElement.prototype,'value').set.call(el,v);el.dispatchEvent(new w.Event('input',{bubbles:true}))};
+const ins=f.querySelectorAll('input[type=number]');set(ins[0],'12');set(ins[1],'25.5');await S(100);console.log('total preview 306?',/306 DH/.test(f.textContent)?'✅':'❌');
+click(f.querySelector('button[type=submit]'));await S(300);const after=JSON.parse(w.localStorage.getItem('sheet_pièce'));console.log('saved?',after.length===before+1&&after.at(-1)[1]==='12'&&after.at(-1)[3]==='306'?'✅':'❌',after.at(-1));
+click([...d.querySelectorAll('button')].find(b=>/Stock par produit/.test(b.textContent)));await S(300);console.log('stock tab rows =',d.querySelectorAll('tbody tr').length,'| badges?',/Rupture|Faible|OK/.test(T())?'✅':'❌');
+process.exit(0);
