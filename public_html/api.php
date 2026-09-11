@@ -1,6 +1,6 @@
 <?php
 /**
- * Paraveda CRM — api.php (v3.45)
+ * Paraveda CRM — api.php (v3.62)
  *
  * Contract used by index.html (unchanged):
  *   GET  api.php                       → { key: {t, d}, ... }
@@ -45,7 +45,7 @@ $ALLOWED_KEYS = array(
   'paraveda_perfrows_v1','paraveda_livraison_v1','paraveda_history_v1','paraveda_villes_v2',
   'paraveda_catalog_v1','sheet_pièce','paraveda_team_photos_v1','tabs_list_v1',
   'custom_sheets_v1','paraveda_period_v1','paraveda_period_v2',
-  'paraveda_backup_v1','paraveda_backup_v1_agents'
+  'paraveda_backup_v1','paraveda_backup_v1_agents','paraveda_reset_v1'
 );
 
 /* ---------- helpers ---------- */
@@ -105,13 +105,18 @@ function crm_backup() {
   $b = glob($BACKUP_DIR . '/b-*.json'); if ($b && count($b) > $KEEP_WRITES) { sort($b); foreach (array_slice($b, 0, count($b) - $KEEP_WRITES) as $f) @unlink($f); }
   $d = glob($BACKUP_DIR . '/d-*.json'); if ($d && count($d) > $KEEP_DAYS)   { sort($d); foreach (array_slice($d, 0, count($d) - $KEEP_DAYS) as $f) @unlink($f); }
 }
-function crm_merge_orders($cur, $in) {
+function crm_merge_orders($cur, $in, $reset = 0) {
   $byId = array(); $order = array();
   foreach ($cur as $o) { if (!is_array($o) || !isset($o['id'])) continue; $id = (string)$o['id']; $byId[$id] = $o; $order[] = $id; }
   foreach ($in as $o) {
     if (!is_array($o) || !isset($o['id'])) continue;
     $id = (string)$o['id'];
-    if (!isset($byId[$id])) { $byId[$id] = $o; $order[] = $id; continue; }
+    if (!isset($byId[$id])) {
+      // v3.62: rows older than the last reset (coming from a stale browser cache) are never resurrected
+      $u = isset($o['_u']) ? (float)$o['_u'] : 0;
+      if ($reset > 0 && $u < $reset) continue;
+      $byId[$id] = $o; $order[] = $id; continue;
+    }
     $a = isset($byId[$id]['_u']) ? (float)$byId[$id]['_u'] : 0; $b = isset($o['_u']) ? (float)$o['_u'] : 0;
     if ($b >= $a) $byId[$id] = $o;
   }
@@ -173,6 +178,15 @@ if ($m === 'POST') {
   $now = (int)(microtime(true) * 1000);
   if ($t > $now + 60000) $t = $now; // clock skew guard
 
+  // v3.62: reset epoch — writes of wiped keys carrying data older than the reset are ignored
+  $__cur0 = crm_read_raw();
+  $RESET_T = isset($__cur0['paraveda_reset_v1']['t']) ? (int)$__cur0['paraveda_reset_v1']['t'] : 0;
+  $RESET_KEYS = array('paraveda_catalog_v1','sheet_pièce','paraveda_history_v1','paraveda_adspend_v1','paraveda_perfrows_v1','paraveda_backup_v1');
+  if ($RESET_T > 0 && in_array($k, $RESET_KEYS, true) && $t < $RESET_T) { crm_audit("reset-stale | key=$k | t=$t < reset=$RESET_T"); crm_out(array('ok'=>true, 'noop'=>'reset-stale', 'reset'=>$RESET_T)); }
+  if ($k === 'paraveda_orders_v5' && $RESET_T > 0 && is_array($d)) {
+    $__f = array(); foreach ($d as $o) { if (is_array($o) && isset($o['_u']) && (float)$o['_u'] >= $RESET_T) $__f[] = $o; }
+    $d = $__f;
+  }
   // ghost guard: never let a client wipe orders/users with an empty array while server has data
   if (($k === 'paraveda_orders_v5' || $k === 'paraveda_users_v1' || $k === 'paraveda_villes_v2') && is_array($d) && count($d) === 0) {
     $cur = crm_read_raw();
@@ -206,7 +220,7 @@ if ($m === 'POST') {
   // v3.45: orders are merged row-by-row (newest _u wins, rows never dropped) so
   // several agents/admins writing at the same time never erase each other.
   if ($k === 'paraveda_orders_v5' && is_array($d) && isset($data[$k]['d']) && is_array($data[$k]['d'])) {
-    $d = crm_merge_orders($data[$k]['d'], $d);
+    $d = crm_merge_orders($data[$k]['d'], $d, $RESET_T);
   }
   $data[$k] = array('t' => $t, 'd' => $d);
   $ok = crm_write($data);
