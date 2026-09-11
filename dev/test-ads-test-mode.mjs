@@ -1,0 +1,28 @@
+import fs from 'fs'; import {JSDOM} from 'jsdom';
+const html=fs.readFileSync('public_html/index.html','utf8'); const js=html.match(/<script type="module" crossorigin>([\s\S]*?)<\/script>/)[1].replace(/import\.meta/g,'({})');
+const base=JSON.parse(fs.readFileSync('public_html/crm_data.json','utf8'));const admin=base.paraveda_users_v1.d.find(u=>u.role==='admin');
+const P='TEST PRODUIT',today='2026-09-10';
+base.paraveda_catalog_v1.d=[{nom:P,link:'',prix:'250',commission:'35',stock:''}];base['sheet_pièce'].d=[[P,'100','40','4000',today]];
+const mk=(id,qte,prix,up,src)=>({id,_u:1,dateCreation:today,dateConfirmation:today,statut:'Confirmé',remarques:'',idCmd:'C'+id,nom:'c'+id,telephone:'0600000000',ville:'Casablanca',adresse:'x',qte,prix,produit:P,livraison:'Livrée',upsell:up,carousell:'',agent:'AYA',link:'',carosellFlag:'',originLead:src,commission:35,fees:0});
+base.paraveda_orders_v5.d=[mk(1,1,250,0,'Facebook'),mk(2,1,250,0,'TikTok')];
+base.paraveda_perfrows_v1.d=[{id:1,source:'Facebook',produit:P,date:today,prix:250},{id:2,source:'TikTok',produit:P,date:today,prix:250}];
+base.paraveda_adspend_v1.d=[];
+const dom=new JSDOM('<div id="root"></div>',{url:'http://localhost/',pretendToBeVisual:true,runScripts:'outside-only'});const w=dom.window;
+w.fetch=async()=>({ok:false});const alerts=[];w.alert=m=>alerts.push(m);w.confirm=()=>true;w.matchMedia=()=>({matches:false,addEventListener(){},removeEventListener(){}});w.ResizeObserver=class{observe(){}unobserve(){}disconnect(){}};w.HTMLCanvasElement.prototype.getContext=()=>null;w.console.error=e=>console.log('ERR',String(e).slice(0,200));w.console.warn=()=>{};
+for(const [k,v] of Object.entries(base)){w.localStorage.setItem(k,JSON.stringify(v.d));w.localStorage.setItem('ct_'+k,String(v.t));}w.localStorage.setItem('paraveda_session_v1',String(admin.id));w.localStorage.removeItem('perf_products_v1');w.eval(js);const S=ms=>new Promise(r=>setTimeout(r,ms));await S(3500);
+const d=w.document,click=el=>el.dispatchEvent(new w.MouseEvent('click',{bubbles:true,cancelable:true,view:w}));const set=(el,v)=>{Object.getOwnPropertyDescriptor(el.tagName==='SELECT'?w.HTMLSelectElement.prototype:w.HTMLInputElement.prototype,'value').set.call(el,v);el.dispatchEvent(new w.Event('input',{bubbles:true}));el.dispatchEvent(new w.Event('change',{bubbles:true}))};
+click([...d.querySelectorAll('div[title]')].find(x=>x.getAttribute('title')==='ADS'));await S(150);click([...d.querySelectorAll('button')].find(b=>b.textContent.trim().endsWith('CRM')));await S(700);
+click([...d.querySelectorAll('button')].find(b=>/تيست منتوج/.test(b.textContent)));await S(200);
+console.log('test mode banner?',/وضع التيست/.test(d.body.textContent)?'✅':'❌','| girl select hidden?',/بلا بنت — تيست/.test(d.body.textContent)?'✅':'❌');
+const add=async(src,amt)=>{set(d.querySelector('input[type=date]'),today);set(d.querySelector('input[list=ads-products]'),P);const sel=[...d.querySelectorAll('select')].find(s=>[...s.options].some(o=>o.value===src));set(sel,src);set(d.querySelector('input[type=number]'),String(amt));await S(100);click([...d.querySelectorAll('button')].find(b=>b.textContent.trim().endsWith('إضافة')));await S(300)};
+await add('Facebook',120);await add('TikTok',80);
+const sp=JSON.parse(w.localStorage.getItem('paraveda_adspend_v1'));console.log('saved 2 test spends (no agent)?',sp.length===2&&sp.every(x=>x.agent==='')?'✅':'❌',sp.map(x=>[x.source,x.amount,x.agent]),'alerts',alerts);
+console.log('table shows 🧪 تيست?',/🧪 تيست/.test(d.body.textContent)?'✅':'❌');
+click([...d.querySelectorAll('div[title]')].find(x=>x.getAttribute('title')==='Bilan'));await S(150);click([...d.querySelectorAll('button')].find(b=>b.textContent.trim().endsWith('Dashboard performance')));await S(800);
+const kol=[...d.querySelectorAll('button')].find(b=>b.textContent.trim()==='الكل');kol&&click(kol);await S(400);
+const tt=[...d.querySelectorAll('[title]')].map(e=>e.title).filter(t=>/GAIN\/PERTE/.test(t));
+const fb=tt.find(t=>/المصروف = 120/.test(t)),tk=tt.find(t=>/المصروف = 80/.test(t));
+console.log('Dashboard Facebook spend 120?',fb?'✅':'❌','| TikTok spend 80?',tk?'✅':'❌');
+// source tabs: need to switch source to see TikTok? tt collected across whatever is rendered
+console.log(tt.map(t=>t.split('\n').filter(l=>/المصروف|GAIN/.test(l)).join(' | ')));
+process.exit(0);
