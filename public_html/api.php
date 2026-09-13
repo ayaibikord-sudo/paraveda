@@ -1,6 +1,6 @@
 <?php
 /**
- * Paraveda CRM — api.php (v3.62)
+ * Paraveda CRM — api.php (v3.65)
  *
  * Contract used by index.html (unchanged):
  *   GET  api.php                       → { key: {t, d}, ... }
@@ -105,6 +105,21 @@ function crm_backup() {
   $b = glob($BACKUP_DIR . '/b-*.json'); if ($b && count($b) > $KEEP_WRITES) { sort($b); foreach (array_slice($b, 0, count($b) - $KEEP_WRITES) as $f) @unlink($f); }
   $d = glob($BACKUP_DIR . '/d-*.json'); if ($d && count($d) > $KEEP_DAYS)   { sort($d); foreach (array_slice($d, 0, count($d) - $KEEP_DAYS) as $f) @unlink($f); }
 }
+// v3.65: field-level merge — a field edited later (per-field stamp _f) is never overwritten
+// by a whole-row write coming from a browser that still held an older copy of the row.
+function crm_merge_row($a, $b) {
+  $ua = isset($a['_u']) ? (float)$a['_u'] : 0; $ub = isset($b['_u']) ? (float)$b['_u'] : 0;
+  $base = $ub >= $ua ? $b : $a; $oth = $ub >= $ua ? $a : $b;
+  if (!empty($base['_del']) || !empty($oth['_del'])) return $base;
+  $bf = (isset($base['_f']) && is_array($base['_f'])) ? $base['_f'] : array();
+  $of = (isset($oth['_f']) && is_array($oth['_f'])) ? $oth['_f'] : array();
+  foreach ($of as $k => $to) {
+    $to = (float)$to; $tb = isset($bf[$k]) ? (float)$bf[$k] : 0;
+    if ($to > $tb && array_key_exists($k, $oth)) { $base[$k] = $oth[$k]; $bf[$k] = $to; }
+  }
+  if ($bf) $base['_f'] = $bf;
+  return $base;
+}
 function crm_merge_orders($cur, $in, $reset = 0) {
   $byId = array(); $order = array();
   foreach ($cur as $o) { if (!is_array($o) || !isset($o['id'])) continue; $id = (string)$o['id']; $byId[$id] = $o; $order[] = $id; }
@@ -117,8 +132,7 @@ function crm_merge_orders($cur, $in, $reset = 0) {
       if ($reset > 0 && $u < $reset) continue;
       $byId[$id] = $o; $order[] = $id; continue;
     }
-    $a = isset($byId[$id]['_u']) ? (float)$byId[$id]['_u'] : 0; $b = isset($o['_u']) ? (float)$o['_u'] : 0;
-    if ($b >= $a) $byId[$id] = $o;
+    $byId[$id] = crm_merge_row($byId[$id], $o);
   }
   $out = array(); foreach (array_unique($order) as $id) $out[] = $byId[$id];
   usort($out, function($x, $y) { $a = (float)$x['id']; $b = (float)$y['id']; return $a == $b ? 0 : ($a < $b ? 1 : -1); });

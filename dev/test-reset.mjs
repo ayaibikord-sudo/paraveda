@@ -13,5 +13,5 @@ w.localStorage.setItem('paraveda_users_v1',JSON.stringify(server.paraveda_users_
 w.eval(_js);await new Promise(r=>setTimeout(r,3000));reloaded=!!w.__reloaded;
 const o=JSON.parse(w.localStorage.getItem('paraveda_orders_v5')||'[]'),c=JSON.parse(w.localStorage.getItem('paraveda_catalog_v1')||'[]');
 console.log('reset applied (reload)?',reloaded?'✅':'❌','| old orders wiped?',o.length===0?'✅':'❌ '+o.length,'| old catalog wiped?',c.length===0?'✅':'❌','| reset_seen set?',!!w.localStorage.getItem('paraveda_reset_seen')?'✅':'❌');
-console.log('POSTs of old orders to server?',posts.filter(p=>p.key==='paraveda_orders_v5'&&p.d.length).length===0?'✅ none':'❌ '+posts.filter(p=>p.key==='paraveda_orders_v5').map(p=>p.d.length));
+console.log(JSON.stringify(posts.filter(p=>p.key==='paraveda_orders_v5').map(p=>p.d)).slice(0,400));console.log('POSTs of old orders to server?',posts.filter(p=>p.key==='paraveda_orders_v5'&&p.d.length).length===0?'✅ none':'❌ '+posts.filter(p=>p.key==='paraveda_orders_v5').map(p=>p.d.length));
 process.exit(0);
